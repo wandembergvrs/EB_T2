@@ -58,7 +58,7 @@
 const CONFIG = {
   MINUTES_REQUIRED: 1,            // Tempo mínimo para liberar envio
   LOCK_MINUTES: 30,               // Bloqueio de nova tentativa após envio
-  PROF_PASSWORD: 'prof123'        // Senha para liberar gabarito
+  PROF_PASSWORD: 'EBT2'        // Senha para liberar gabarito
 };
 
 // ============================ Anti-cópia ==================================
@@ -423,13 +423,13 @@ function renderReview(){
         <div class="row" style="justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
           <div class="title">Gabarito — Acesso do Professor</div>
         </div>
-        <p class="muted">Digite a senha do professor para liberar o gabarito e a revisão visual.</p>
+        <p class="muted">Digite a senha para liberar o gabarito e a revisão visual.</p>
         <div class="row" style="gap:8px">
-          <input id="profPass" type="password" placeholder="Senha do professor" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.04); color:#fff;">
+          <input id="profPass" type="password" placeholder="Senha" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.04); color:#fff;">
           <button class="btn" id="unlockBtn">Liberar</button>
           <button class="btn ghost" onclick="location.reload()">Voltar</button>
         </div>
-        <div class="footer">Altere a senha no código: <code>CONFIG.PROF_PASSWORD</code>.</div>
+        
       </div>`;
     document.getElementById('unlockBtn').onclick = ()=>{ const v=(document.getElementById('profPass').value||'').trim(); if (v===CONFIG.PROF_PASSWORD){ sessionStorage.setItem('review_unlocked','1'); renderReview(); } else alert('Senha incorreta.'); };
     return;
