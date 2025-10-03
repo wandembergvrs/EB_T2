@@ -78,17 +78,7 @@ function fontMetrics(ctx){ const m=ctx.measureText('Mg'); return {ascent:m.actua
 function baselineCenterY(ctx, baselineY){ const {ascent,descent}=fontMetrics(ctx); return baselineY + (descent - ascent)/2; }
 function now(){ return Date.now(); }
 
-function handleFocusLoss(reason){ /* reseta e alerta */ }
-document.addEventListener('visibilitychange', …);
-window.addEventListener('blur', …);
-window.addEventListener('focusout', …);
-window.addEventListener('pagehide', …);
-document.addEventListener('freeze', …);
-if (AppState.started && !document.hasFocus()) { handleFocusLoss('hasFocus'); return; }
-
-
-
-  
+ 
   
 // ======================= Questões / Respostas ==============================
 const QUIZ = [
