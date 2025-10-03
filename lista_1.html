@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lista ANPEC — Anti-cópia & Tempo Mínimo</title>
+  <title>Lista 1 — Economia Brasileira</title>
   <style>
     :root{--bg:#0b1020;--card:#10172a;--muted:#b5bfd1;--text:#e8eefc;--accent:#7aa2ff;--ok:#16a34a;--warn:#f59e0b;--err:#ef4444}
     * { box-sizing: border-box; }
@@ -25,7 +25,6 @@
     .btn[disabled] { opacity: .45; cursor: not-allowed; }
     .btn:active { transform: translateY(1px); }
     .ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.16); }
-    .footer { opacity: .7; font-size: 12px; margin-top: 6px; }
 
     .qcard { border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); border-radius: 16px; padding: 12px; }
     .qheader { display:flex; align-items:center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
@@ -40,6 +39,15 @@
     .nocopy-overlay { position: fixed; inset: 0; pointer-events: none; background: repeating-linear-gradient( 115deg, rgba(255,255,255,0.015) 0, rgba(255,255,255,0.015) 2px, transparent 2px, transparent 10px ); }
 
     .tip { font-size: 12px; color: var(--muted); }
+
+    /* HUD fixo no topo */
+    .hud{ position: sticky; top: 8px; z-index: 100; background: rgba(16,23,42,0.9); border:1px solid rgba(255,255,255,0.10); border-radius: 14px; padding:10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); backdrop-filter: blur(6px); }
+    .hud-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .hud-title{ font-weight:800; letter-spacing:0.3px; }
+    .hud-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .hud-progress{ width: 260px; max-width: 50vw; height: 10px; background: rgba(255,255,255,0.12); border-radius: 999px; overflow: hidden; }
+    #hudBar{ height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #9ad1ff); transition: width .35s ease; }
+    @media (max-width:640px){ .hud-progress{ width: 100%; max-width: 100%; order: 3; } .hud-right{ gap:8px; } }
 
     /* Debug Panel (só aparece com ?debug=1 ou atalho) */
     #debugPanel{ display:none; position: fixed; bottom: 10px; right: 10px; width: 320px; max-height: 60vh; overflow:auto; padding: 12px; border-radius: 12px; background: #0c1225; border:1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 30px rgba(0,0,0,.4); font-size:12px }
@@ -56,9 +64,10 @@
 <script>
 // ============================ Configurações ================================
 const CONFIG = {
-  MINUTES_REQUIRED: 1,            // Tempo mínimo para liberar envio
-  LOCK_MINUTES: 30,               // Bloqueio de nova tentativa após envio
-  PROF_PASSWORD: 'EBT2'        // Senha para liberar gabarito
+  MINUTES_REQUIRED: 15,            // Tempo mínimo para liberar envio (30s)
+  LOCK_MINUTES: 30,               // Bloqueio de nova tentativa após envio (30s)
+  PROF_PASSWORD: 'EBT2',       // Senha para liberar gabarito
+  FOCUS_GRACE_MS: 1200            // Tolerância após iniciar (evita falso positivo de perda de foco)
 };
 
 // ============================ Anti-cópia ==================================
@@ -78,8 +87,6 @@ function fontMetrics(ctx){ const m=ctx.measureText('Mg'); return {ascent:m.actua
 function baselineCenterY(ctx, baselineY){ const {ascent,descent}=fontMetrics(ctx); return baselineY + (descent - ascent)/2; }
 function now(){ return Date.now(); }
 
- 
-  
 // ======================= Questões / Respostas ==============================
 const QUIZ = [
   { id:1, type:'vf', title:'Modelo agroexportador (V/F)',
@@ -212,28 +219,37 @@ const AppState = {
   startTs:null,
   minMillis: CONFIG.MINUTES_REQUIRED * 60 * 1000,
   answers: {},
-  review:false
+  review:false,
+  focusGraceUntil: 0
 };
 
 // ====================== Renderização Base =================================
 const appEl = document.getElementById('app');
 
 function renderStart(){
+  // Migração: se houver um bloqueio antigo maior que o configurado, reduz para o novo valor
+  const stored = Number(localStorage.getItem('exam_lock_until')||0);
+  if (stored && now() < stored) {
+    const desired = now() + CONFIG.LOCK_MINUTES*60*1000;
+    if ((stored - now()) > (CONFIG.LOCK_MINUTES*60*1000 + 1000)) {
+      localStorage.setItem('exam_lock_until', String(desired));
+    }
+  }
   const lockedUntil = Number(localStorage.getItem('exam_lock_until')||0);
   const locked = lockedUntil && now() < lockedUntil;
   const remain = Math.max(0, lockedUntil - now());
   appEl.innerHTML = `
     <div class="card" role="region" aria-label="Início da lista">
-      <div class="title">Lista 1</div>
+      <div class="title">Lista 1 — Economia Brasileira</div>
       <p class="muted">• O preenchimento inicia quando você clicar em <b>Iniciar</b>.<br>
-      • <b>Tempo mínimo</b> de ${CONFIG.MINUTES_REQUIRED} minuto${CONFIG.MINUTES_REQUIRED>1?'s':''} antes de permitir o envio.<br>
+      • <b>Tempo mínimo</b> de ${fmtTime(AppState.minMillis)} antes de permitir o envio.<br>
       • O envio somente é liberado com <b>todas</b> as questões respondidas.</p>
       <div class="row">
         <button class="btn" ${locked?'disabled':''} onclick="startExam()">${locked? 'Bloqueado': 'Iniciar'}</button>
         <button class="btn ghost" onclick="location.reload()">Sair</button>
       </div>
       ${locked? `<div class="status" style="margin-top:8px">Nova tentativa em: <b id="lockTimer">${fmtTime(remain)}</b></div>`: ''}
-     
+      
     </div>`;
   if (locked){
     const el = document.getElementById('lockTimer');
@@ -246,16 +262,18 @@ function renderExam(){
   const answeredCount = QUIZ.filter(q=>isAnswered(q)).length;
   const total = QUIZ.length;
   appEl.innerHTML = `
-    <div class="card" role="region" aria-label="Prova">
-      <div class="row" style="justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
-        <div class="title">Lista ANPEC</div>
-        <div class="row">
-          <div class="status">Tempo restante para liberar envio: <b id="timer">${fmtTime(AppState.minMillis)}</b></div>
+    <div id="hud" class="hud" role="region" aria-label="Painel fixo">
+      <div class="hud-row">
+        <div class="hud-title">Lista 1 — Economia Brasileira</div>
+        <div class="hud-right">
+          <div class="status">Tempo: <b id="hudTimer">${fmtTime(AppState.minMillis)}</b></div>
+          <div class="hud-progress" aria-hidden="true"><div class="bar" id="hudBar" style="width:0%"></div></div>
+          <div class="tip" id="hudProgressText">Progresso: ${answeredCount}/${total} respondidas</div>
           <button class="btn ghost" onclick="if(confirm('Reiniciar? As respostas serão perdidas.')) location.reload()">Reiniciar</button>
         </div>
       </div>
-      <div class="progress" aria-hidden="true"><div class="bar" style="width:0%"></div></div>
-      <div class="tip" style="margin:8px 0 14px 0">Progresso: ${answeredCount}/${total} respondidas</div>
+    </div>
+    <div class="card" role="region" aria-label="Lista 1">
       <div class="stack" id="qstack"></div>
       <div class="row" style="justify-content:flex-end;margin-top:14px">
         <button id="submitBtn" class="btn" disabled onclick="submitExam()">Enviar respostas</button>
@@ -282,6 +300,7 @@ function startExam(){
   const until = Number(localStorage.getItem('exam_lock_until')||0);
   if (until && now()<until){ alert('Nova tentativa bloqueada. Aguarde: '+fmtTime(until-now())); return; }
   AppState.started = true; AppState.startTs = now();
+  AppState.focusGraceUntil = now() + CONFIG.FOCUS_GRACE_MS; // evita falso positivo de blur/focusout
   render(); tick();
 }
 
@@ -290,12 +309,17 @@ function resetExam(reason=''){
   renderStart();
 }
 
-document.addEventListener('visibilitychange', ()=>{
-  if (document.hidden && AppState.started){
-    alert('A aba foi trocada/ocultada. O teste foi reiniciado.');
-    resetExam('visibility');
-  }
-});
+function handleFocusLoss(reason){
+  if (!AppState.started) return;
+  if (now() < AppState.focusGraceUntil) return; // tolerância pós-início
+  resetExam(reason);
+  setTimeout(()=>alert('A janela perdeu o foco (detector: '+reason+'). O teste foi reiniciado.'),0);
+}
+
+document.addEventListener('visibilitychange', ()=>{ if (document.hidden) handleFocusLoss('visibility'); });
+window.addEventListener('blur',  ()=> handleFocusLoss('blur'));
+window.addEventListener('pagehide',  ()=> handleFocusLoss('pagehide'));
+document.addEventListener('freeze',  ()=> handleFocusLoss('freeze'));
 
 function allAnswered(){
   return QUIZ.every(q=>{
@@ -310,14 +334,14 @@ function timeOk(){ if (!AppState.startTs) return false; return (now()-AppState.s
 
 function submitExam(){
   if (!allAnswered()) { alert('Resolução incompleta: responda todas as questões.'); return; }
-  if (!timeOk()) { alert(`Tempo mínimo de ${CONFIG.MINUTES_REQUIRED} minuto${CONFIG.MINUTES_REQUIRED>1?'s':''} ainda não cumprido.`); return; }
+  if (!timeOk()) { alert(`Tempo mínimo de ${fmtTime(AppState.minMillis)} ainda não cumprido.`); return; }
   const lockUntil = now() + CONFIG.LOCK_MINUTES*60*1000; localStorage.setItem('exam_lock_until', String(lockUntil));
   AppState.review = true; AppState.started = false; renderReview();
 }
 
 function tick(){
-  const timerEl = document.getElementById('timer');
-  const barEl = document.querySelector('.bar');
+  const timerEl = document.getElementById('hudTimer');
+  const barEl = document.getElementById('hudBar');
   const submitBtn = document.getElementById('submitBtn');
   if (timerEl && AppState.startTs){
     const elapsed = now()-AppState.startTs; const remain = Math.max(0, AppState.minMillis - elapsed);
@@ -342,8 +366,8 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight){
 
 function drawVFBox(ctx, x, y, label){ ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=2; const w=36,h=24; ctx.strokeRect(x,y,w,h); ctx.font='bold 14px Inter, system-ui, Arial'; ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fillText(label, x+(w/2-5), y+(h/2+5)); ctx.restore(); }
 function drawTick(ctx, x, y, color='#7aa2ff'){ ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x+8,y+12); ctx.lineTo(x+14,y+18); ctx.lineTo(x+26,y+6); ctx.stroke(); ctx.restore(); }
-function drawCrossBox(ctx, x, y, w, h, color='#ef4444'){ ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(x+6,y+6); ctx.lineTo(x+w-6,y+h-6); ctx.moveTo(x+w-6,y+6); ctx.lineTo(x+6,y+h-6); ctx.stroke(); ctx.restore(); }
 function drawCrossAt(ctx, cx, cy, size=16, color='#ef4444'){ ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=2.5; const r=size/2; ctx.beginPath(); ctx.moveTo(cx-r, cy-r); ctx.lineTo(cx+r, cy+r); ctx.moveTo(cx+r, cy-r); ctx.lineTo(cx-r, cy+r); ctx.stroke(); ctx.restore(); }
+function drawCheckAt(ctx, cx, cy, size=16, color='#16a34a'){ ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=3; const r=size/2; ctx.beginPath(); ctx.moveTo(cx - r*0.6, cy + r*0.1); ctx.lineTo(cx - r*0.2, cy + r*0.5); ctx.lineTo(cx + r*0.6, cy - r*0.5); ctx.stroke(); ctx.restore(); }
 function drawHighlight(ctx, x, y, w, h, rgba){ ctx.save(); ctx.fillStyle=rgba; ctx.fillRect(x,y,w,h); ctx.restore(); }
 
 function drawQuestion(q, mode='exam'){
@@ -351,18 +375,24 @@ function drawQuestion(q, mode='exam'){
   const key = ANSWER_KEY[q.id]; const userAns = AppState.answers[q.id];
 
   const scale = devicePixelRatioSafe(ctx); const cssWidth = canvas.clientWidth || 900; const baseW = Math.min(900, cssWidth); const padding=20; const contentW=baseW - padding*2;
-  // medição
+  
+  // ================= Passo 1: medição (apenas mede; não usa HitMap) ========
   ctx.setTransform(1,0,0,1,0,0); canvas.width = baseW * scale; ctx.setTransform(scale,0,0,scale,0,0); ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.font='600 16px Inter, system-ui, Arial'; let x=padding, y=padding+6; y = wrapText(ctx, q.stem, x, y, contentW, 22) + 8;
   ctx.font='15px Inter, system-ui, Arial'; ctx.fillStyle='rgba(255,255,255,0.9)';
-  if (q.type==='vf'){ (q.statements||[]).forEach((s)=>{ const ly=y; y = wrapText(ctx, s, x, y, contentW-160, 20) + 6; const center=baselineCenterY(ctx,ly); const boxY=center-12; y=Math.max(y, boxY+24+6); }); }
-  if (q.type==='mc'){ (q.options||[]).forEach(opt=>{ const oy=y; y = wrapText(ctx, opt, x+32, oy, contentW-40, 20) + 6; }); }
+  if (q.type==='vf'){
+    (q.statements||[]).forEach((s)=>{ const ly=y; y = wrapText(ctx, s, x, y, contentW-160, 20) + 6; const center=baselineCenterY(ctx,ly); const boxY=center-12; y=Math.max(y, boxY+24+6); });
+  } else if (q.type==='mc'){
+    (q.options||[]).forEach((opt,i)=>{ const oy=y; y = wrapText(ctx, `(${String.fromCharCode(97+i)}) `+opt, x+32, oy, contentW-40, 20) + 6; });
+  }
   const neededH = y + padding; canvas.height = neededH * scale; ctx.setTransform(scale,0,0,scale,0,0); ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // desenho definitivo
-  ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.font='600 16px Inter, system-ui, Arial'; x=padding; y=padding+6; y = wrapText(ctx, q.stem, x, y, contentW, 22) + 8; ctx.font='15px Inter, system-ui, Arial'; ctx.fillStyle='rgba(255,255,255,0.9)';
-  HitMap.set(q.id, { type:q.type, boxes:[] }); const map = HitMap.get(q.id);
+  // ================= Passo 2: desenho final + hit test =====================
+  HitMap.set(q.id, { type:q.type, boxes:[] });
+  const map = HitMap.get(q.id);
 
+  ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.font='600 16px Inter, system-ui, Arial'; x=padding; y=padding+6; y = wrapText(ctx, q.stem, x, y, contentW, 22) + 8; ctx.font='15px Inter, system-ui, Arial'; ctx.fillStyle='rgba(255,255,255,0.9)';
+  
   if (q.type==='vf'){
     const a = userAns || { bools: new Array(q.statements.length).fill(null) };
     q.statements.forEach((s,i)=>{
@@ -371,12 +401,22 @@ function drawQuestion(q, mode='exam'){
       if (a.bools[i]===true) drawTick(ctx, vX, boxY, '#7aa2ff');
       if (a.bools[i]===false) drawTick(ctx, fX, boxY, '#7aa2ff');
       if (mode==='review' && key && Array.isArray(key.bools)){
-        const correctIsV = key.bools[i]===true; const gx = correctIsV ? vX : fX; drawHighlight(ctx, gx, boxY, 36, 24, 'rgba(22,163,74,0.35)'); drawTick(ctx, gx, boxY, '#16a34a');
-        const ux = a.bools[i]===true ? vX : (a.bools[i]===false ? fX : null);
-        if (ux!==null && (a.bools[i]!==key.bools[i])) drawCrossAt(ctx, ux+18, boxY+12, 14, '#ef4444'); // X centralizado na caixa escolhida
+        const correctIsV = key.bools[i]===true; const correctX = correctIsV ? vX : fX;
+        const user = a.bools[i];
+        const userX = user===true ? vX : (user===false ? fX : null);
+        if (user!==null && user===key.bools[i]) {
+          // Acertou: destacar APENAS a escolha do usuário em verde
+          drawHighlight(ctx, userX, boxY, 36, 24, 'rgba(22,163,74,0.35)');
+          drawTick(ctx, userX, boxY, '#16a34a');
+        } else {
+          // Errou: X vermelho na escolhida (se houver) e apenas um "check" na correta (sem highlight verde)
+          if (userX!==null) drawCrossAt(ctx, userX+18, boxY+12, 14, '#ef4444');
+          drawTick(ctx, correctX, boxY, '#16a34a');
+        }
       }
       map.boxes.push({kind:'vf', row:i, choice:'V', x:vX, y:boxY, w:36, h:24});
       map.boxes.push({kind:'vf', row:i, choice:'F', x:fX, y:boxY, w:36, h:24});
+      y=Math.max(y, boxY+24+6);
     });
   }
 
@@ -384,14 +424,32 @@ function drawQuestion(q, mode='exam'){
     const sel = userAns;
     q.options.forEach((opt,i)=>{
       const oy=y; const r=8; const cx=x+12; const cy=baselineCenterY(ctx, oy);
+      // radio outline
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=2; ctx.stroke();
-      if (typeof sel==='number' && sel===i && mode!=='review'){ ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fillStyle='white'; ctx.fill(); }
-      const ox=x+32; y = wrapText(ctx, `(${String.fromCharCode(97+i)}) `+opt, ox, oy, contentW-40, 20) + 6;
+      // selecionado (modo exame): ponto branco
+      if (typeof sel==='number' && sel===i && mode!=='review'){
+        ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fillStyle='white'; ctx.fill(); ctx.restore();
+      }
+      // texto da alternativa
+      const ox=x+32; ctx.fillStyle='rgba(255,255,255,0.9)';
+      y = wrapText(ctx, `(${String.fromCharCode(97+i)}) `+opt, ox, oy, contentW-40, 20) + 6;
+
+      const rect = { x: x+2, y: oy-8, w: contentW-4, h: (y-oy)+10 };
+      // hitboxes
       map.boxes.push({kind:'mc-radio', idx:i, x:cx-14, y:cy-14, w:28, h:28});
-      map.boxes.push({kind:'mc-text', idx:i, x:ox, y:oy-8, w:contentW-(ox-x), h:(y-oy)+10});
+      map.boxes.push({kind:'mc-text',  idx:i, x:ox,    y:oy-8,  w:contentW-(ox-x), h:(y-oy)+10});
+
+      // review visuals
       if (mode==='review' && key){
-        if (key.correct===i){ drawHighlight(ctx, x+2, oy-8, contentW-4, (y-oy)+10, 'rgba(22,163,74,0.18)'); ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fillStyle='#16a34a'; ctx.fill(); }
-        if (typeof sel==='number' && sel===i && sel!==key.correct){ drawCrossAt(ctx, cx, cy, 18, '#ef4444'); } // X centralizado na alternativa marcada
+        if (typeof sel==='number' && sel===i && sel===key.correct){
+          drawHighlight(ctx, rect.x, rect.y, rect.w, rect.h, 'rgba(22,163,74,0.18)');
+          ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fillStyle='#16a34a'; ctx.fill(); ctx.restore();
+        } else if (typeof sel==='number' && sel===i && sel!==key.correct){
+          drawCrossAt(ctx, cx, cy, 18, '#ef4444');
+        }
+        if (typeof sel==='number' && sel!==key.correct && i===key.correct){
+          drawCheckAt(ctx, cx, cy, 18, '#16a34a');
+        }
       }
     });
   }
@@ -399,14 +457,14 @@ function drawQuestion(q, mode='exam'){
   // clique
   canvas.onclick = function(ev){
     if (mode==='review') return;
-    const rect = canvas.getBoundingClientRect(); const px=(ev.clientX-rect.left); const py=(ev.clientY-rect.top); const map=HitMap.get(q.id); if (!map) return;
-    let box=null; for (let i=map.boxes.length-1;i>=0;i--){ const b=map.boxes[i]; if (px>=b.x && px<=b.x+b.w && py>=b.y && py<=b.y+b.h){ box=b; break; } }
+    const rect = canvas.getBoundingClientRect(); const px=(ev.clientX-rect.left); const py=(ev.clientY-rect.top); const mapLocal = HitMap.get(q.id) || {boxes:[]}; if (!mapLocal.boxes.length) return;
+    let box=null; for (let i=mapLocal.boxes.length-1;i>=0;i--){ const b=mapLocal.boxes[i]; if (px>=b.x && px<=b.x+b.w && py>=b.y && py<=b.y+b.h){ box=b; break; } }
     if (!box) return;
     if (box.kind==='mc-radio' || box.kind==='mc-text'){ AppState.answers[q.id] = box.idx; }
     else if (box.kind==='vf'){ const cur = (AppState.answers[q.id] && AppState.answers[q.id].bools) ? AppState.answers[q.id].bools.slice() : new Array(q.statements.length).fill(null); cur[box.row] = (box.choice==='V'); AppState.answers[q.id] = { bools: cur }; }
     const st=document.getElementById(`status-${q.id}`); if (st) st.textContent = isAnswered(q)?'Respondida':'Em aberto';
     drawQuestion(q,'exam'); const submitBtn=document.getElementById('submitBtn'); if (submitBtn) submitBtn.disabled = (!timeOk() || !allAnswered());
-    const tip = document.querySelector('.tip'); const answeredCount=QUIZ.filter(qq=>isAnswered(qq)).length; if (tip) tip.textContent = `Progresso: ${answeredCount}/${QUIZ.length} respondidas`;
+    const tip = document.querySelector('.tip'); const answeredCount=QUIZ.filter(qq=>isAnswered(qq)).length; if (tip) tip.textContent = `Progresso: ${answeredCount}/${QUIZ.length} respondidas`; const hudTxt = document.getElementById('hudProgressText'); if (hudTxt) hudTxt.textContent = `Progresso: ${answeredCount}/${QUIZ.length} respondidas`;
   };
 }
 
@@ -423,7 +481,7 @@ function renderReview(){
     appEl.innerHTML = `
       <div class="card">
         <div class="row" style="justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
-          <div class="title">Gabarito — Acesso do Professor</div>
+          <div class="title">Gabarito — Acesso Restrito</div>
         </div>
         <p class="muted">Digite a senha para liberar o gabarito e a revisão visual.</p>
         <div class="row" style="gap:8px">
@@ -431,7 +489,6 @@ function renderReview(){
           <button class="btn" id="unlockBtn">Liberar</button>
           <button class="btn ghost" onclick="location.reload()">Voltar</button>
         </div>
-        
       </div>`;
     document.getElementById('unlockBtn').onclick = ()=>{ const v=(document.getElementById('profPass').value||'').trim(); if (v===CONFIG.PROF_PASSWORD){ sessionStorage.setItem('review_unlocked','1'); renderReview(); } else alert('Senha incorreta.'); };
     return;
@@ -477,7 +534,19 @@ function runSelfTests(){
     // TC3: envio bloqueado no início (sem tempo e sem todas respondidas)
     AppState.started=true; AppState.startTs=now(); AppState.minMillis=CONFIG.MINUTES_REQUIRED*60*1000; tassert('timeOk() inicialmente falso', !timeOk()); tassert('allAnswered() inicialmente falso', !allAnswered()); AppState.started=false;
     // TC4: renderReview exige senha (gate)
-    sessionStorage.removeItem('review_unlocked'); renderReview(); const gate = document.body.innerHTML.includes('Gabarito — Acesso do Professor'); tassert('Gate de senha presente', gate);
+    sessionStorage.removeItem('review_unlocked'); renderReview(); const gate = !!document.getElementById('profPass'); tassert('Gate de senha presente', gate);
+    tassert('Gate sem referência a Professor', !document.body.innerHTML.includes('Professor'));
+    // TC5: após desbloqueio, canvases presentes
+    sessionStorage.setItem('review_unlocked','1'); renderReview(); const canv = document.querySelectorAll('canvas[id^="canvas-"]').length; tassert('Review renderiza canvases', canv>=1);
+    // TC6: focus guard reinicia
+    AppState.started=true; AppState.startTs=now(); handleFocusLoss('test'); tassert('Focus guard: AppState.started=false', !AppState.started);
+    // TC7: grace impede reset imediato após iniciar
+    AppState.started=true; AppState.startTs=now(); AppState.focusGraceUntil = now() + CONFIG.FOCUS_GRACE_MS; handleFocusLoss('testGrace'); tassert('Focus guard: dentro da graça não reseta', AppState.started===true);
+    // TC8: VF cria 2 caixas por assertiva
+    const q1 = QUIZ.find(q=>q.id===1); drawQuestion(q1,'exam'); const map1 = HitMap.get(1); const vfBoxes = map1 && map1.boxes ? map1.boxes.filter(b=>b.kind==='vf').length : 0; tassert('VF: 2 boxes por assertiva', vfBoxes === (q1.statements.length*2));
+    // TC9: tempo mínimo configurado para 30s / bloqueio 30s
+    tassert('Tempo mínimo = 30s', CONFIG.MINUTES_REQUIRED*60*1000 === 30000);
+    tassert('Bloqueio = 30s', CONFIG.LOCK_MINUTES*60*1000 === 30000);
   }catch(e){ tassert('Self-tests executados sem exceção', false); }
   renderTestPanel();
 }
