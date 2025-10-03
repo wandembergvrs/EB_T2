@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lista ANPEC — Anti-cópia & Tempo Mínimo</title>
+  <style>
+    :root{--bg:#0b1020;--card:#10172a;--muted:#b5bfd1;--text:#e8eefc;--accent:#7aa2ff;--ok:#16a34a;--warn:#f59e0b;--err:#ef4444}
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji';
+      background: linear-gradient(180deg, #0b1020 0%, #0f1630 100%);
+      color: var(--text);
+      -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; /* anti-cópia */
+    }
+    img, canvas { -webkit-user-drag: none; user-select: none; }
+
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 24px; }
+    .card { background: var(--card); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); backdrop-filter: blur(6px); }
+    .title { font-size: clamp(20px, 3.5vw, 32px); font-weight: 800; letter-spacing: 0.4px; }
+    .muted { color: var(--muted); }
+    .row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .btn { appearance: none; border: none; cursor: pointer; border-radius: 12px; padding: 12px 16px; font-weight: 700; color: #0b1020; background: var(--accent); transition: transform .06s ease; }
+    .btn[disabled] { opacity: .45; cursor: not-allowed; }
+    .btn:active { transform: translateY(1px); }
+    .ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.16); }
+    .footer { opacity: .7; font-size: 12px; margin-top: 6px; }
+
+    .qcard { border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); border-radius: 16px; padding: 12px; }
+    .qheader { display:flex; align-items:center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .qtitle { font-weight: 800; letter-spacing:0.3px }
+    .status { font-size:12px; padding:4px 8px; border-radius: 8px; background: rgba(255,255,255,0.06); }
+
+    .stack { display: grid; gap: 16px; }
+
+    .progress { height: 10px; background: rgba(255,255,255,0.12); border-radius: 999px; overflow: hidden; }
+    .bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #9ad1ff); transition: width .35s ease; }
+
+    .nocopy-overlay { position: fixed; inset: 0; pointer-events: none; background: repeating-linear-gradient( 115deg, rgba(255,255,255,0.015) 0, rgba(255,255,255,0.015) 2px, transparent 2px, transparent 10px ); }
+
+    .tip { font-size: 12px; color: var(--muted); }
+
+    /* Debug Panel (só aparece com ?debug=1 ou atalho) */
+    #debugPanel{ display:none; position: fixed; bottom: 10px; right: 10px; width: 320px; max-height: 60vh; overflow:auto; padding: 12px; border-radius: 12px; background: #0c1225; border:1px solid rgba(255,255,255,0.15); box-shadow: 0 8px 30px rgba(0,0,0,.4); font-size:12px }
+    #debugPanel .ok{ color: var(--ok);} #debugPanel .fail{ color: var(--err);} #debugPanel h4{margin:0 0 8px 0}
+  </style>
+</head>
+<body oncontextmenu="return false" ondragstart="return false" onselectstart="return false">
+  <div class="nocopy-overlay" aria-hidden="true"></div>
+  <div class="wrap">
+    <div id="app"></div>
+  </div>
+  <div id="debugPanel"><h4>Self-Tests</h4><div id="testList"></div></div>
+
+<script>
+// ============================ Configurações ================================
+const CONFIG = {
+  MINUTES_REQUIRED: 1,            // Tempo mínimo para liberar envio
+  LOCK_MINUTES: 30,               // Bloqueio de nova tentativa após envio
+  PROF_PASSWORD: 'prof123'        // Senha para liberar gabarito
+};
+
+// ============================ Anti-cópia ==================================
+(function antiCopy(){
+  const blockedCombos = [['c'],['x'],['s'],['a'],['p'],['u'],['i'],['j'],['k']];
+  document.addEventListener('keydown', (e)=>{
+    if ((e.ctrlKey||e.metaKey) && (blockedCombos.some(([k])=>e.key.toLowerCase()===k) || e.shiftKey)) { e.preventDefault(); e.stopPropagation(); }
+    if (e.key==='F12' || e.keyCode===44) { e.preventDefault(); e.stopPropagation(); }
+  }, {capture:true});
+  ['copy','cut','paste','contextmenu'].forEach(ev=>document.addEventListener(ev, e=>{e.preventDefault(); e.stopPropagation();}, {capture:true}));
+})();
+
+// ============================ Util ========================================
+function fmtTime(ms){ const s=Math.max(0,Math.ceil(ms/1000)); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; }
+function devicePixelRatioSafe(ctx){ const dpr=window.devicePixelRatio||1; const bsr=ctx.backingStorePixelRatio||ctx.webkitBackingStorePixelRatio||ctx.mozBackingStorePixelRatio||ctx.msBackingStorePixelRatio||ctx.oBackingStorePixelRatio||1; return dpr/bsr; }
+function fontMetrics(ctx){ const m=ctx.measureText('Mg'); return {ascent:m.actualBoundingBoxAscent||12, descent:m.actualBoundingBoxDescent||4}; }
+function baselineCenterY(ctx, baselineY){ const {ascent,descent}=fontMetrics(ctx); return baselineY + (descent - ascent)/2; }
+function now(){ return Date.now(); }
+
+// ======================= Questões / Respostas ==============================
+const QUIZ = [
+  { id:1, type:'vf', title:'Modelo agroexportador (V/F)',
+    stem:'Julgue as assertivas como Verdadeiras (V) ou Falsas (F).',
+    statements:[
+      'No início do século XX, a pauta exportadora brasileira era altamente concentrada em café, e o setor externo condicionava a acumulação de capital interno.',
+      'O Convênio de Taubaté (1906) instituiu a compra e retenção de estoques públicos para sustentar preços do café.',
+      'A Caixa de Conversão (1906–1914) funcionava como âncora cambial em regime de câmbio fixo-ouro, compatível com forte entrada de capitais.',
+      'A dinâmica da economia agroexportadora implicava elevada sensibilidade do investimento doméstico aos ciclos internacionais de preços.',
+      'A transição para a industrialização de base já se completara antes de 1910.'
+    ]
+  },
+  { id:2, type:'mc', title:'Década de 1920 (múltipla escolha)',
+    stem:'Assinale a alternativa correta sobre os Planos de Valorização do Café e a política cambial dos anos 1920.',
+    options:[
+      'Os PVC reduziram a dependência de financiamento externo ao proibir retenção de estoques no Brasil.',
+      'A defesa permanente do café (a partir de 1924) diminuiu o custo fiscal e eliminou a tendência à superprodução.',
+      'A Caixa de Estabilização (1926) buscou estabilizar o câmbio após desvalorizações, mas sua eficácia dependia da abundância de capitais.',
+      'A política cambial dos anos 1920 transferia renda da indústria para a agricultura, estimulando exportações.',
+      'A valorização cambial de 1921–22 foi suficiente para impedir a crise de 1929 sobre o setor externo.'
+    ]
+  },
+  { id:3, type:'mc', title:'1930–1934 (múltipla escolha)',
+    stem:'Sobre as respostas de política econômica à crise de 1929 e à ruptura institucional de 1930, assinale a correta.',
+    options:[
+      'Houve liberalização cambial imediata (1931) e eliminação de controles comerciais.',
+      'A política cafeeira abandonou a queima/retenção de estoques para evitar custos fiscais.',
+      'Adotaram-se controles cambiais, racionamento de divisas e moratória/renegociação da dívida, com reconfiguração do papel do Estado.',
+      'O governo reduziu o intervencionismo estatal e vendeu empresas estratégicas como a CSN.',
+      'O câmbio foi rigidamente fixo durante toda a década de 1930.'
+    ]
+  },
+  { id:4, type:'mc', title:'Estado Novo e ISI (associação)',
+    stem:'Associe instituições/medidas a seus objetivos predominantes e assinale a combinação correta: I) DASP (1938), II) CSN (1941), III) CLT (1943), IV) SUMOC (1945) — 1) Planejamento/coordenação; 2) Indústria de base; 3) Consolidação de direitos; 4) Política cambial/monetária.',
+    options:[
+      'I–2; II–1; III–4; IV–3',
+      'I–1; II–2; III–3; IV–4',
+      'I–4; II–3; III–2; IV–1',
+      'I–3; II–4; III–1; IV–2',
+      'I–2; II–4; III–1; IV–3'
+    ]
+  },
+  { id:5, type:'mc', title:'II Guerra Mundial (múltipla escolha)',
+    stem:'Sobre a trajetória industrial 1939–1945, marque a alternativa correta.',
+    options:[
+      'O bloqueio externo reduziu a produção industrial em todo o período, sem retomada.',
+      'Houve desaceleração até c. 1942 e aceleração em 1943–44, com limites de capacidade e gargalos de insumos.',
+      'A guerra expandiu fortemente a capacidade produtiva via importação maciça de bens de capital.',
+      'O setor agrícola cresceu de modo uniforme acima de 20% ao ano durante a guerra.',
+      'A coordenação econômica foi feita por um banco central independente, criado em 1940.'
+    ]
+  },
+  { id:6, type:'vf', title:'Governo Dutra (V/F)',
+    stem:'Considere as afirmações e julgue V/F: (i) Fase A: liberalização cambial/comercial e política interna ortodoxa, apoiadas no acúmulo de reservas do pós-guerra. (ii) A “desilusão liberal” decorreu, entre outros fatores, da escassez de capitais internacionais e do bloqueio de divisas em libras. (iii) Fase B: retorno a controles seletivos de importação, sem ajuste na política interna.',
+    statements:[
+      'Fase A: liberalização cambial/comercial e política interna ortodoxa, apoiadas no acúmulo de reservas do pós-guerra.',
+      'A “desilusão liberal” decorreu, entre outros fatores, da escassez de capitais internacionais e do bloqueio de divisas em libras.',
+      'Fase B: retorno a controles seletivos de importação, sem ajuste na política interna.'
+    ]
+  },
+  { id:7, type:'mc', title:'Plano de Metas (múltipla escolha)',
+    stem:'Sobre o desenho do Plano de Metas (1956–1961), assinale a correta.',
+    options:[
+      'Priorizou exclusivamente exportações agrícolas e manteve tarifas públicas defasadas.',
+      'Baseou-se em encadeamentos produtivos, com foco em energia/transportes e indústrias de base, e metas para o setor automotivo.',
+      'Rejeitou o uso de matrizes insumo-produto para compatibilização setorial.',
+      'Evitou investimentos públicos e restringiu a participação de estatais.',
+      'Manteve crescimento baixo com inflação cadente a um dígito em todo o período.'
+    ]
+  },
+  { id:8, type:'mc', title:'1961–1963 e Plano Trienal (múltipla escolha)',
+    stem:'Sobre o período parlamentarista e o Plano Trienal, marque a alternativa correta.',
+    options:[
+      'O parlamentarismo eliminou a instabilidade ministerial e consolidou base estável para reformas.',
+      'O Plano Trienal diagnosticou a inflação como de custos exclusivamente, propondo expansão monetária.',
+      'As metas incluíam desinflação (100% → 25% → 10%), correção de preços relativos e negociação externa.',
+      'Em 1963, a execução superou metas de crescimento e desinflação, com forte queda do crédito.',
+      'O plebiscito de 1963 manteve o parlamentarismo até 1967.'
+    ]
+  },
+  { id:9, type:'vf', title:'Crise dos anos 1960 e PAEG (V/F)',
+    stem:'Julgue as assertivas como V/F.',
+    statements:[
+      'Entre as causas conjunturais destacam-se instabilidade política (1961–63) e política recessiva de combate à inflação.',
+      'Entre as causas estruturais incluem-se limites do PSI, excesso de capacidade pós-Plano de Metas e inadequação institucional/financeira.',
+      'A estratégia do PAEG combinou gradualismo desinflacionário, metas e convivência com inflação via correção monetária, além de regra salarial com inflação passada e produtividade.',
+      'A recuperação industrial consolidou-se já em 1965, com crescimento robusto e contínuo até 1966.'
+    ]
+  },
+  { id:10, type:'mc', title:'Síntese — classificação (múltipla escolha)',
+    stem:'Classifique como (C) conjuntural ou (E) estrutural: I) Alternância de gabinetes e incerteza (1961–63); II) Limites de mercado interno ao avanço do PSI; III) Queda do investimento em bens de capital (ciclo); IV) Ajuste recessivo de curto prazo. Assinale a alternativa correta.',
+    options:[
+      'I–C; II–C; III–E; IV–E',
+      'I–C; II–E; III–C; IV–E',
+      'I–E; II–E; III–C; IV–C',
+      'I–C; II–E; III–E; IV–C'
+    ]
+  }
+];
+
+const ANSWER_KEY = {
+  1: { type:'vf', bools:[true,true,true,true,false] },
+  2: { type:'mc', correct:2 },
+  3: { type:'mc', correct:2 },
+  4: { type:'mc', correct:1 },
+  5: { type:'mc', correct:1 },
+  6: { type:'vf', bools:[true,true,false] },
+  7: { type:'mc', correct:1 },
+  8: { type:'mc', correct:2 },
+  9: { type:'vf', bools:[true,true,true,false] },
+  10:{ type:'mc', correct:3 } // I–C; II–E; III–E; IV–C
+};
+
+const EXPLAIN = {
+  1: [ 'i) V — Pauta concentrada em café; condicionamento externo. <em>Aula 1, p. 16–17.</em>', 'ii) V — Convênio de Taubaté: compras e retenção de estoques. <em>Aula 1, p. 17.</em>', 'iii) V — Caixa de Conversão (paridade-ouro). <em>Aula 1, p. 19.</em>', 'iv) V — Investimento sensível ao ciclo externo. <em>Aula 1, p. 16–17.</em>', 'v) F — A industrialização de base não estava concluída antes de 1910.' ],
+  2: [ '(c) correta — Caixa de Estabilização dependente de capitais abundantes. <em>Aula 2, p. 9.</em>' ],
+  3: [ '(c) correta — Controles cambiais, racionamento e moratória (1931). <em>Aula 3, p. 6.</em>' ],
+  4: [ '(b) correta — DASP→planejamento; CSN→base; CLT→direitos; SUMOC→câmbio. <em>Aula 4, p. 12.</em>' ],
+  5: [ '(b) correta — Queda 39–42 e aceleração 43–44 com limites de capacidade. <em>Aula 5, p. 3.</em>' ],
+  6: [ 'i) V — Fase A liberal com ortodoxia e reservas. <em>Aula 6, p. 4.</em>', 'ii) V — “Desilusão liberal”: capitais escassos e libras bloqueadas. <em>Aula 6, p. 14.</em>', 'iii) F — Fase B teve ajustes internos; não “sem ajuste”.' ],
+  7: [ '(b) correta — Encadeamentos (energia/transportes/base) e meta automotiva. <em>Aula 8, p. 9–12.</em>' ],
+  8: [ '(c) correta — Metas 100→25→10; correção de preços; negociação externa. <em>Aula 9, p. 15.</em>' ],
+  9: [ 'i–iii) V — Conjuntural vs. estrutural; PAEG com gradualismo/indexação. <em>Aula 9, p. 16; Aula 10A, p. 8–10, 13–17.</em>' ],
+  10:[ '(d) correta — I e IV (C); II e III (E). <em>Aula 9, p. 16–17; Aula 10A, p. 8–10.</em>' ]
+};
+
+// ====================== Estado do App =====================================
+const AppState = {
+  started:false,
+  startTs:null,
+  minMillis: CONFIG.MINUTES_REQUIRED * 60 * 1000,
+  answers: {},
+  review:false
+};
+
+// ====================== Renderização Base =================================
+const appEl = document.getElementById('app');
+
+function renderStart(){
+  const lockedUntil = Number(localStorage.getItem('exam_lock_until')||0);
+  const locked = lockedUntil && now() < lockedUntil;
+  const remain = Math.max(0, lockedUntil - now());
+  appEl.innerHTML = `
+    <div class="card" role="region" aria-label="Início da lista">
+      <div class="title">Lista ANPEC — Resolução com anti-cópia</div>
+      <p class="muted">• A prova inicia quando você clicar em <b>Iniciar</b>.<br>
+      • <b>Tempo mínimo</b> de ${CONFIG.MINUTES_REQUIRED} minuto${CONFIG.MINUTES_REQUIRED>1?'s':''} antes de permitir o envio.<br>
+      • O texto das questões é renderizado em <b>canvas</b> para impedir cópia.<br>
+      • O envio somente é liberado com <b>todas</b> as questões respondidas.</p>
+      <div class="row">
+        <button class="btn" ${locked?'disabled':''} onclick="startExam()">${locked? 'Bloqueado': 'Iniciar'}</button>
+        <button class="btn ghost" onclick="location.reload()">Sair</button>
+      </div>
+      ${locked? `<div class="status" style="margin-top:8px">Nova tentativa em: <b id="lockTimer">${fmtTime(remain)}</b></div>`: ''}
+      <div class="footer">Recursos de copiar/colar e menu de contexto foram desabilitados.</div>
+    </div>`;
+  if (locked){
+    const el = document.getElementById('lockTimer');
+    const loop = ()=>{ if (!el) return; const r=Math.max(0, Number(localStorage.getItem('exam_lock_until')) - now()); el.textContent = fmtTime(r); if (r>0) requestAnimationFrame(loop); else renderStart(); };
+    requestAnimationFrame(loop);
+  }
+}
+
+function renderExam(){
+  const answeredCount = QUIZ.filter(q=>isAnswered(q)).length;
+  const total = QUIZ.length;
+  appEl.innerHTML = `
+    <div class="card" role="region" aria-label="Prova">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
+        <div class="title">Lista ANPEC</div>
+        <div class="row">
+          <div class="status">Tempo restante para liberar envio: <b id="timer">${fmtTime(AppState.minMillis)}</b></div>
+          <button class="btn ghost" onclick="if(confirm('Reiniciar? As respostas serão perdidas.')) location.reload()">Reiniciar</button>
+        </div>
+      </div>
+      <div class="progress" aria-hidden="true"><div class="bar" style="width:0%"></div></div>
+      <div class="tip" style="margin:8px 0 14px 0">Progresso: ${answeredCount}/${total} respondidas</div>
+      <div class="stack" id="qstack"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">
+        <button id="submitBtn" class="btn" disabled onclick="submitExam()">Enviar respostas</button>
+      </div>
+    </div>`;
+  const holder = document.getElementById('qstack');
+  QUIZ.forEach((q, idx)=>{
+    const card=document.createElement('div'); card.className='qcard';
+    card.innerHTML = `
+      <div class="qheader">
+        <div class="qtitle">Questão ${idx+1} — ${q.title}</div>
+        <div class="status" id="status-${q.id}">${isAnswered(q)?'Respondida':'Em aberto'}</div>
+      </div>
+      <canvas id="canvas-${q.id}" width="900" height="200" style="width:100%; height:auto; display:block; border-radius: 12px; background: rgba(255,255,255,0.02);"></canvas>`;
+    holder.appendChild(card);
+    drawQuestion(q, 'exam');
+  });
+}
+
+function render(){ AppState.started ? renderExam() : renderStart(); }
+
+// ========================== Fluxo principal ================================
+function startExam(){
+  const until = Number(localStorage.getItem('exam_lock_until')||0);
+  if (until && now()<until){ alert('Nova tentativa bloqueada. Aguarde: '+fmtTime(until-now())); return; }
+  AppState.started = true; AppState.startTs = now();
+  render(); tick();
+}
+
+function resetExam(reason=''){
+  AppState.started=false; AppState.startTs=null; AppState.review=false; AppState.answers={}; sessionStorage.removeItem('review_unlocked');
+  renderStart();
+}
+
+document.addEventListener('visibilitychange', ()=>{
+  if (document.hidden && AppState.started){
+    alert('A aba foi trocada/ocultada. O teste foi reiniciado.');
+    resetExam('visibility');
+  }
+});
+
+function allAnswered(){
+  return QUIZ.every(q=>{
+    const a = AppState.answers[q.id];
+    if (q.type==='mc') return typeof a === 'number';
+    if (q.type==='vf') return a && Array.isArray(a.bools) && a.bools.length===q.statements.length && a.bools.every(v=>typeof v==='boolean');
+    return false;
+  });
+}
+
+function timeOk(){ if (!AppState.startTs) return false; return (now()-AppState.startTs) >= AppState.minMillis; }
+
+function submitExam(){
+  if (!allAnswered()) { alert('Resolução incompleta: responda todas as questões.'); return; }
+  if (!timeOk()) { alert(`Tempo mínimo de ${CONFIG.MINUTES_REQUIRED} minuto${CONFIG.MINUTES_REQUIRED>1?'s':''} ainda não cumprido.`); return; }
+  const lockUntil = now() + CONFIG.LOCK_MINUTES*60*1000; localStorage.setItem('exam_lock_until', String(lockUntil));
+  AppState.review = true; AppState.started = false; renderReview();
+}
+
+function tick(){
+  const timerEl = document.getElementById('timer');
+  const barEl = document.querySelector('.bar');
+  const submitBtn = document.getElementById('submitBtn');
+  if (timerEl && AppState.startTs){
+    const elapsed = now()-AppState.startTs; const remain = Math.max(0, AppState.minMillis - elapsed);
+    timerEl.textContent = fmtTime(remain);
+    const pct = Math.min(100, Math.floor( (elapsed/AppState.minMillis)*100 ));
+    if (barEl) barEl.style.width = pct + '%';
+  }
+  if (submitBtn) submitBtn.disabled = (!timeOk() || !allAnswered());
+  if (AppState.started) requestAnimationFrame(tick);
+}
+
+// ============================ Desenho ======================================
+const HitMap = new Map(); // qid -> { type, boxes:[...] }
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight){
+  const words=(String(text)).split(/\s+/); let line=''; const lines=[];
+  for (let n=0;n<words.length;n++){ const test=line+words[n]+' '; const w=ctx.measureText(test).width; if (w>maxWidth && n>0){ lines.push(line.trim()); line=words[n]+' '; } else { line=test; } }
+  lines.push(line.trim());
+  for (const ln of lines){ ctx.fillText(ln, x, y); y += lineHeight; }
+  return y;
+}
+
+function drawVFBox(ctx, x, y, label){ ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=2; const w=36,h=24; ctx.strokeRect(x,y,w,h); ctx.font='bold 14px Inter, system-ui, Arial'; ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.fillText(label, x+(w/2-5), y+(h/2+5)); ctx.restore(); }
+function drawTick(ctx, x, y, color='#7aa2ff'){ ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x+8,y+12); ctx.lineTo(x+14,y+18); ctx.lineTo(x+26,y+6); ctx.stroke(); ctx.restore(); }
+function drawCrossBox(ctx, x, y, w, h, color='#ef4444'){ ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.beginPath(); ctx.moveTo(x+6,y+6); ctx.lineTo(x+w-6,y+h-6); ctx.moveTo(x+w-6,y+6); ctx.lineTo(x+6,y+h-6); ctx.stroke(); ctx.restore(); }
+function drawCrossAt(ctx, cx, cy, size=16, color='#ef4444'){ ctx.save(); ctx.strokeStyle=color; ctx.lineWidth=2.5; const r=size/2; ctx.beginPath(); ctx.moveTo(cx-r, cy-r); ctx.lineTo(cx+r, cy+r); ctx.moveTo(cx+r, cy-r); ctx.lineTo(cx-r, cy+r); ctx.stroke(); ctx.restore(); }
+function drawHighlight(ctx, x, y, w, h, rgba){ ctx.save(); ctx.fillStyle=rgba; ctx.fillRect(x,y,w,h); ctx.restore(); }
+
+function drawQuestion(q, mode='exam'){
+  const canvas = document.getElementById(`canvas-${q.id}`); const ctx = canvas.getContext('2d');
+  const key = ANSWER_KEY[q.id]; const userAns = AppState.answers[q.id];
+
+  const scale = devicePixelRatioSafe(ctx); const cssWidth = canvas.clientWidth || 900; const baseW = Math.min(900, cssWidth); const padding=20; const contentW=baseW - padding*2;
+  // medição
+  ctx.setTransform(1,0,0,1,0,0); canvas.width = baseW * scale; ctx.setTransform(scale,0,0,scale,0,0); ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.font='600 16px Inter, system-ui, Arial'; let x=padding, y=padding+6; y = wrapText(ctx, q.stem, x, y, contentW, 22) + 8;
+  ctx.font='15px Inter, system-ui, Arial'; ctx.fillStyle='rgba(255,255,255,0.9)';
+  if (q.type==='vf'){ (q.statements||[]).forEach((s)=>{ const ly=y; y = wrapText(ctx, s, x, y, contentW-160, 20) + 6; const center=baselineCenterY(ctx,ly); const boxY=center-12; y=Math.max(y, boxY+24+6); }); }
+  if (q.type==='mc'){ (q.options||[]).forEach(opt=>{ const oy=y; y = wrapText(ctx, opt, x+32, oy, contentW-40, 20) + 6; }); }
+  const neededH = y + padding; canvas.height = neededH * scale; ctx.setTransform(scale,0,0,scale,0,0); ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // desenho definitivo
+  ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.font='600 16px Inter, system-ui, Arial'; x=padding; y=padding+6; y = wrapText(ctx, q.stem, x, y, contentW, 22) + 8; ctx.font='15px Inter, system-ui, Arial'; ctx.fillStyle='rgba(255,255,255,0.9)';
+  HitMap.set(q.id, { type:q.type, boxes:[] }); const map = HitMap.get(q.id);
+
+  if (q.type==='vf'){
+    const a = userAns || { bools: new Array(q.statements.length).fill(null) };
+    q.statements.forEach((s,i)=>{
+      const ly=y; y = wrapText(ctx, `${i+1}. ${s}`, x, y, contentW-160, 20) + 6; const center=baselineCenterY(ctx,ly); const boxY=center-12; const vX=x+contentW-140, fX=x+contentW-70;
+      drawVFBox(ctx, vX, boxY, 'V'); drawVFBox(ctx, fX, boxY, 'F');
+      if (a.bools[i]===true) drawTick(ctx, vX, boxY, '#7aa2ff');
+      if (a.bools[i]===false) drawTick(ctx, fX, boxY, '#7aa2ff');
+      if (mode==='review' && key && Array.isArray(key.bools)){
+        const correctIsV = key.bools[i]===true; const gx = correctIsV ? vX : fX; drawHighlight(ctx, gx, boxY, 36, 24, 'rgba(22,163,74,0.35)'); drawTick(ctx, gx, boxY, '#16a34a');
+        const ux = a.bools[i]===true ? vX : (a.bools[i]===false ? fX : null);
+        if (ux!==null && (a.bools[i]!==key.bools[i])) drawCrossAt(ctx, ux+18, boxY+12, 14, '#ef4444'); // X centralizado na caixa escolhida
+      }
+      map.boxes.push({kind:'vf', row:i, choice:'V', x:vX, y:boxY, w:36, h:24});
+      map.boxes.push({kind:'vf', row:i, choice:'F', x:fX, y:boxY, w:36, h:24});
+    });
+  }
+
+  if (q.type==='mc'){
+    const sel = userAns;
+    q.options.forEach((opt,i)=>{
+      const oy=y; const r=8; const cx=x+12; const cy=baselineCenterY(ctx, oy);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=2; ctx.stroke();
+      if (typeof sel==='number' && sel===i && mode!=='review'){ ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fillStyle='white'; ctx.fill(); }
+      const ox=x+32; y = wrapText(ctx, `(${String.fromCharCode(97+i)}) `+opt, ox, oy, contentW-40, 20) + 6;
+      map.boxes.push({kind:'mc-radio', idx:i, x:cx-14, y:cy-14, w:28, h:28});
+      map.boxes.push({kind:'mc-text', idx:i, x:ox, y:oy-8, w:contentW-(ox-x), h:(y-oy)+10});
+      if (mode==='review' && key){
+        if (key.correct===i){ drawHighlight(ctx, x+2, oy-8, contentW-4, (y-oy)+10, 'rgba(22,163,74,0.18)'); ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2); ctx.fillStyle='#16a34a'; ctx.fill(); }
+        if (typeof sel==='number' && sel===i && sel!==key.correct){ drawCrossAt(ctx, cx, cy, 18, '#ef4444'); } // X centralizado na alternativa marcada
+      }
+    });
+  }
+
+  // clique
+  canvas.onclick = function(ev){
+    if (mode==='review') return;
+    const rect = canvas.getBoundingClientRect(); const px=(ev.clientX-rect.left); const py=(ev.clientY-rect.top); const map=HitMap.get(q.id); if (!map) return;
+    let box=null; for (let i=map.boxes.length-1;i>=0;i--){ const b=map.boxes[i]; if (px>=b.x && px<=b.x+b.w && py>=b.y && py<=b.y+b.h){ box=b; break; } }
+    if (!box) return;
+    if (box.kind==='mc-radio' || box.kind==='mc-text'){ AppState.answers[q.id] = box.idx; }
+    else if (box.kind==='vf'){ const cur = (AppState.answers[q.id] && AppState.answers[q.id].bools) ? AppState.answers[q.id].bools.slice() : new Array(q.statements.length).fill(null); cur[box.row] = (box.choice==='V'); AppState.answers[q.id] = { bools: cur }; }
+    const st=document.getElementById(`status-${q.id}`); if (st) st.textContent = isAnswered(q)?'Respondida':'Em aberto';
+    drawQuestion(q,'exam'); const submitBtn=document.getElementById('submitBtn'); if (submitBtn) submitBtn.disabled = (!timeOk() || !allAnswered());
+    const tip = document.querySelector('.tip'); const answeredCount=QUIZ.filter(qq=>isAnswered(qq)).length; if (tip) tip.textContent = `Progresso: ${answeredCount}/${QUIZ.length} respondidas`;
+  };
+}
+
+function isAnswered(q){ const a=AppState.answers[q.id]; if (q.type==='mc') return typeof a==='number'; if (q.type==='vf') return a && Array.isArray(a.bools) && a.bools.length===q.statements.length && a.bools.every(v=>typeof v==='boolean'); return false; }
+
+// ====================== Revisão (Gabarito) ================================
+function getExplainHTML(qid){ const arr=EXPLAIN[qid]||[]; return arr.length? '<ul>'+arr.map(s=>`<li>${s}</li>`).join('')+'</ul>' : '—'; }
+
+function computeScore(){ let correctQ=0,totalQ=QUIZ.length,correctS=0,totalS=0; QUIZ.forEach(q=>{ const a=AppState.answers[q.id]; const k=ANSWER_KEY[q.id]; if (!a||!k) return; if (q.type==='mc'){ if (typeof a==='number' && a===k.correct) correctQ++; } else if (q.type==='vf'){ const user=(a&&a.bools)?a.bools:[]; const corr=k.bools||[]; let all=true; for (let i=0;i<corr.length;i++){ if (user[i]===corr[i]) correctS++; else all=false; } totalS += corr.length; if (all && user.length===corr.length) correctQ++; } }); return {correctQ,totalQ,correctS,totalS}; }
+
+function renderReview(){
+  // gate de senha
+  if (sessionStorage.getItem('review_unlocked')!=='1'){
+    appEl.innerHTML = `
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
+          <div class="title">Gabarito — Acesso do Professor</div>
+        </div>
+        <p class="muted">Digite a senha do professor para liberar o gabarito e a revisão visual.</p>
+        <div class="row" style="gap:8px">
+          <input id="profPass" type="password" placeholder="Senha do professor" style="flex:1; padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.04); color:#fff;">
+          <button class="btn" id="unlockBtn">Liberar</button>
+          <button class="btn ghost" onclick="location.reload()">Voltar</button>
+        </div>
+        <div class="footer">Altere a senha no código: <code>CONFIG.PROF_PASSWORD</code>.</div>
+      </div>`;
+    document.getElementById('unlockBtn').onclick = ()=>{ const v=(document.getElementById('profPass').value||'').trim(); if (v===CONFIG.PROF_PASSWORD){ sessionStorage.setItem('review_unlocked','1'); renderReview(); } else alert('Senha incorreta.'); };
+    return;
+  }
+
+  const score = computeScore();
+  appEl.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
+        <div class="title">Gabarito e Revisão</div>
+        <div class="row"><button class="btn ghost" onclick="location.reload()">Fechar</button></div>
+      </div>
+      <div class="tip" style="margin-bottom:10px">Você acertou <b>${score.correctQ}</b> de <b>${score.totalQ}</b> questões (${Math.round(100*score.correctQ/score.totalQ)}%). ${score.totalS? ' — V/F: <b>'+score.correctS+'</b> de <b>'+score.totalS+'</b> assertivas.':''}</div>
+      <div class="stack" id="qstack"></div>
+    </div>`;
+
+  const holder = document.getElementById('qstack');
+  QUIZ.forEach((q, idx)=>{
+    const card=document.createElement('div'); card.className='qcard';
+    card.innerHTML = `
+      <div class="qheader">
+        <div class="qtitle">Questão ${idx+1} — ${q.title} <span class="status">Gabarito</span></div>
+      </div>
+      <canvas id="canvas-${q.id}" width="900" height="200" style="width:100%; height:auto; display:block; border-radius: 12px; background: rgba(255,255,255,0.02);"></canvas>
+      <details style="margin-top:8px">
+        <summary>Referências & justificativas</summary>
+        <div class="muted" style="margin-top:6px">${getExplainHTML(q.id)}</div>
+      </details>`;
+    holder.appendChild(card);
+    drawQuestion(q,'review');
+  });
+}
+
+// ====================== Self Tests (não alteram lógica) ===================
+const TESTS = [];
+function tassert(name, cond){ TESTS.push({name, ok: !!cond}); }
+function runSelfTests(){
+  try{
+    // TC1: Q10 tem 4 alternativas
+    const q10 = QUIZ.find(q=>q.id===10); tassert('Q10 tem 4 alternativas', q10 && q10.options && q10.options.length===4);
+    // TC2: hitboxes criadas para última alternativa de Q2
+    const q2 = QUIZ.find(q=>q.id===2); drawQuestion(q2,'exam'); const map2 = HitMap.get(2); const hasLast = map2 && map2.boxes && map2.boxes.some(b=> (b.kind==='mc-text'||b.kind==='mc-radio') && b.idx===4); tassert('Hitboxes incluem última alternativa (Q2, idx=4)', !!hasLast);
+    // TC3: envio bloqueado no início (sem tempo e sem todas respondidas)
+    AppState.started=true; AppState.startTs=now(); AppState.minMillis=CONFIG.MINUTES_REQUIRED*60*1000; tassert('timeOk() inicialmente falso', !timeOk()); tassert('allAnswered() inicialmente falso', !allAnswered()); AppState.started=false;
+    // TC4: renderReview exige senha (gate)
+    sessionStorage.removeItem('review_unlocked'); renderReview(); const gate = document.body.innerHTML.includes('Gabarito — Acesso do Professor'); tassert('Gate de senha presente', gate);
+  }catch(e){ tassert('Self-tests executados sem exceção', false); }
+  renderTestPanel();
+}
+function renderTestPanel(){
+  const show = (new URLSearchParams(location.search)).get('debug')==='1';
+  const panel = document.getElementById('debugPanel'); const list = document.getElementById('testList'); if (!panel||!list) return;
+  list.innerHTML = TESTS.map(t=>`<div class="${t.ok?'ok':'fail'}">${t.ok?'✔':'✖'} ${t.name}</div>`).join('');
+  if (show) panel.style.display='block';
+}
+(function enableTestHotkey(){
+  let dCount=0; document.addEventListener('keydown', (e)=>{ if (e.key.toLowerCase()==='d'){ dCount++; if (dCount>=3){ const p=document.getElementById('debugPanel'); if (p) p.style.display = (p.style.display==='block'?'none':'block'); dCount=0; } setTimeout(()=>dCount=0,600); } }, {capture:true});
+})();
+
+// ===================== Inicialização ======================================
+function init(){ renderStart(); runSelfTests(); }
+window.startExam = startExam; window.submitExam = submitExam; window.drawQuestion = drawQuestion; window.renderReview = renderReview; window.resetExam = resetExam; // export pals
+init();
+</script>
+</body>
+</html>
