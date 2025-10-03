@@ -222,17 +222,16 @@ function renderStart(){
   const remain = Math.max(0, lockedUntil - now());
   appEl.innerHTML = `
     <div class="card" role="region" aria-label="Início da lista">
-      <div class="title">Lista ANPEC — Resolução com anti-cópia</div>
-      <p class="muted">• A prova inicia quando você clicar em <b>Iniciar</b>.<br>
+      <div class="title">Lista 1</div>
+      <p class="muted">• O preenchimento inicia quando você clicar em <b>Iniciar</b>.<br>
       • <b>Tempo mínimo</b> de ${CONFIG.MINUTES_REQUIRED} minuto${CONFIG.MINUTES_REQUIRED>1?'s':''} antes de permitir o envio.<br>
-      • O texto das questões é renderizado em <b>canvas</b> para impedir cópia.<br>
       • O envio somente é liberado com <b>todas</b> as questões respondidas.</p>
       <div class="row">
         <button class="btn" ${locked?'disabled':''} onclick="startExam()">${locked? 'Bloqueado': 'Iniciar'}</button>
         <button class="btn ghost" onclick="location.reload()">Sair</button>
       </div>
       ${locked? `<div class="status" style="margin-top:8px">Nova tentativa em: <b id="lockTimer">${fmtTime(remain)}</b></div>`: ''}
-      <div class="footer">Recursos de copiar/colar e menu de contexto foram desabilitados.</div>
+     
     </div>`;
   if (locked){
     const el = document.getElementById('lockTimer');
