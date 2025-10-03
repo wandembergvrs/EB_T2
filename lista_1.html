@@ -313,7 +313,7 @@ function handleFocusLoss(reason){
   if (!AppState.started) return;
   if (now() < AppState.focusGraceUntil) return; // tolerância pós-início
   resetExam(reason);
-  setTimeout(()=>alert('A janela perdeu o foco (detector: '+reason+'). O teste foi reiniciado.'),0);
+  setTimeout(()=>alert('A janela perdeu o foco. O teste foi reiniciado.'),0);
 }
 
 document.addEventListener('visibilitychange', ()=>{ if (document.hidden) handleFocusLoss('visibility'); });
