@@ -544,9 +544,9 @@ function runSelfTests(){
     AppState.started=true; AppState.startTs=now(); AppState.focusGraceUntil = now() + CONFIG.FOCUS_GRACE_MS; handleFocusLoss('testGrace'); tassert('Focus guard: dentro da graça não reseta', AppState.started===true);
     // TC8: VF cria 2 caixas por assertiva
     const q1 = QUIZ.find(q=>q.id===1); drawQuestion(q1,'exam'); const map1 = HitMap.get(1); const vfBoxes = map1 && map1.boxes ? map1.boxes.filter(b=>b.kind==='vf').length : 0; tassert('VF: 2 boxes por assertiva', vfBoxes === (q1.statements.length*2));
-    // TC9: tempo mínimo configurado para 30s / bloqueio 30s
-    tassert('Tempo mínimo = 30s', CONFIG.MINUTES_REQUIRED*60*1000 === 30000);
-    tassert('Bloqueio = 30s', CONFIG.LOCK_MINUTES*60*1000 === 30000);
+    // TC9: tempo mínimo configurado para 15 minutos / bloqueio 15 minutos
+    tassert('Tempo mínimo = 15 minutos', CONFIG.MINUTES_REQUIRED*60*1000 === 30000);
+    tassert('Bloqueio = 15 minutos', CONFIG.LOCK_MINUTES*60*1000 === 30000);
   }catch(e){ tassert('Self-tests executados sem exceção', false); }
   renderTestPanel();
 }
