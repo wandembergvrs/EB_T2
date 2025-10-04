@@ -33,17 +33,30 @@
     .badge.ok{ background: rgba(22,163,74,.12); border-color: rgba(22,163,74,.35); }
     .badge.warn{ background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.35); }
 
-    /*footer{ margin-top: 18px; font-size: 12px; color: var(--muted); opacity:.85; }*/
-
- /* Footer */
-    footer{
-      border-top:1px solid var(--line); padding:14px 20px; color:#cbd5e1; font-size:12px;
-      display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap
-    }
-    .statcounter img{width:140px;height:auto;filter:invert(1) opacity(.65)}
-    
+        
   </style>
 </head>
+<footer>
+  
+  <!-- Statcounter VISÍVEL (mostra a imagem/contador no rodapé) -->
+  <script type="text/javascript">
+    var sc_project = 13172460;
+    var sc_invisible = 0;                // <— VISÍVEL!
+    var sc_security = "1a960d5b";
+    var scJsHost = "https://";
+    document.write("<sc"+"ript type='text/javascript' src='" + scJsHost +
+                   "statcounter.com/counter/counter.js'></"+"script>");
+  </script>
+   <!-- Fallback para quem está sem JS -->
+  <noscript>
+    <a href="https://statcounter.com/" target="_blank" rel="nofollow" class="statcounter" title="Web Analytics">
+      <img class="statcounter"
+           src="https://c.statcounter.com/13172460/0/1a960d5b/0/"
+           alt="Web Analytics" referrerpolicy="no-referrer-when-downgrade">
+    </a>
+  </noscript>
+</footer>
+  
 <body>
   <div class="wrap">
     <header>
@@ -126,15 +139,6 @@
     })();
   </script>
 
-  <!-- Default Statcounter code for EB -->
-  <script type="text/javascript">
-    var sc_project=13172460;
-    var sc_invisible=0;
-    var sc_security="1a960d5b";
-    var scJsHost = "https://";
-    document.write("<sc"+"ript type='text/javascript' src='" + scJsHost+
-    "statcounter.com/counter/counter.js'></"+"script>");
-  </script>
-  
+ 
 </body>
 </html>
