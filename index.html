@@ -6,11 +6,15 @@
   <title>Portal — Listas de Economia Brasileira</title>
   <style>
     :root{
-      --bg:#0b1020; --card:#10172a; --muted:#b5bfd1; --text:#e8eefc; --accent:#7aa2ff; --ok:#16a34a; --warn:#f59e0b; --err:#ef4444;--line: rgba(255,255,255,.12); /* <— ADICIONEI ISTO */
+      --bg:#0b1020; --card:#10172a; --muted:#b5bfd1; --text:#e8eefc; --accent:#7aa2ff; --ok:#16a34a; --warn:#f59e0b; --err:#ef4444; --line: rgba(255,255,255,.12);
     }
     *{ box-sizing: border-box; }
     html, body{ height:100%; }
-    body{ margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial; color:var(--text); background: radial-gradient(1200px 600px at 10% -10%, #1a254b 0%, transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f1630 100%); }
+    body{
+      margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial;
+      color:var(--text);
+      background: radial-gradient(1200px 600px at 10% -10%, #1a254b 0%, transparent 60%), linear-gradient(180deg, #0b1020 0%, #0f1630 100%);
+    }
 
     .wrap{ max-width: 1100px; margin: 0 auto; padding: 24px; }
     header{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom: 18px; }
@@ -18,7 +22,10 @@
     .muted{ color:var(--muted); }
 
     .cards{ display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-    .card{ position:relative; background: var(--card); border: 1px solid rgba(255,255,255,0.08); border-radius:16px; padding:16px; box-shadow: 0 10px 30px rgba(0,0,0,.35); overflow:hidden; min-height:160px; display:flex; flex-direction:column; }
+    .card{
+      position:relative; background: var(--card); border: 1px solid rgba(255,255,255,0.08); border-radius:16px; padding:16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35); overflow:hidden; min-height:160px; display:flex; flex-direction:column;
+    }
     .card.primary{ background: linear-gradient(135deg, rgba(122,162,255,.18), rgba(122,162,255,.06)); border-color: rgba(122,162,255,.35); }
 
     .card h3{ margin:0 0 6px 0; font-size: 18px; font-weight: 800; letter-spacing:.2px; }
@@ -32,17 +39,15 @@
     .badge{ display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:4px 8px; border-radius:999px; background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); }
     .badge.ok{ background: rgba(22,163,74,.12); border-color: rgba(22,163,74,.35); }
     .badge.warn{ background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.35); }
-
-        
   </style>
 </head>
-  
+
 <body>
   <div class="wrap">
     <header>
       <div>
         <div class="title">Listas de Economia Brasileira</div>
-        <div class="muted">Selecione uma lista para começar. A Lista 1 está pronta e vem primeiro.</div>
+        <div class="muted">Selecione uma lista para começar. As Listas 1 e 2 estão disponíveis.</div>
       </div>
       <div class="row">
         <span class="badge">Portal</span>
@@ -50,22 +55,27 @@
     </header>
 
     <section class="cards">
-      <!-- Lista 1 — PRIMEIRO CARD -->
+      <!-- Lista 1 -->
       <article class="card primary" id="card-l1">
         <h3>Lista 1</h3>
         <p class="desc">Economia Brasileira (1920–1967)</p>
         <div class="row" style="margin-top:10px">
           <button id="btn-l1" class="btn" onclick="goLista1()">Abrir</button>
-          <span id="lock-l1" class="badge warn" style="display:none">Bloqueado: <span id="lock-eta">--:--</span></span>
+          <span id="lock-l1" class="badge warn" style="display:none">Bloqueado: <span id="lock-eta-l1">--:--</span></span>
         </div>
       </article>
 
-      <!-- Demais listas (exemplos/placeholder) -->
-      <article class="card">
+      <!-- Lista 2 -->
+      <article class="card" id="card-l2">
         <h3>Lista 2</h3>
-        <p class="desc">Em preparação.</p>
-        <div class="row"><button class="btn" disabled>Em breve</button></div>
+        <p class="desc">Economia Brasileira (temas relevantes)</p>
+        <div class="row" style="margin-top:10px">
+          <button id="btn-l2" class="btn" onclick="goLista2()">Abrir</button>
+          <span id="lock-l2" class="badge warn" style="display:none">Bloqueado: <span id="lock-eta-l2">--:--</span></span>
+        </div>
       </article>
+
+      <!-- Placeholders -->
       <article class="card">
         <h3>Lista 3</h3>
         <p class="desc">Em preparação.</p>
@@ -82,62 +92,86 @@
         <div class="row"><button class="btn" disabled>Em breve</button></div>
       </article>
     </section>
-
-    
   </div>
 
   <script>
-    // Se você salvou a prova como "lista1.html" (recomendado), este link funcionará direto.
-    // Se ela estiver com outro nome, ajuste a constante abaixo:
+    // Caminhos das provas (ajuste os nomes conforme seus arquivos)
     const LISTA1_URL = 'lista_1.html';
+    const LISTA2_URL = 'lista_2.html';
 
-    function fmtTime(ms){ const s=Math.max(0,Math.ceil(ms/1000)); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; }
-
-    function goLista1(){
-      // Se estiver bloqueado, não navega
-      const until = Number(localStorage.getItem('exam_lock_until')||0);
-      if (until && Date.now()<until) return;
-      // Navega: se você estiver usando este portal dentro do mesmo diretório do arquivo da prova
-      location.href = LISTA1_URL;
+    function fmtTime(ms){
+      const s=Math.max(0,Math.ceil(ms/1000));
+      const mm=String(Math.floor(s/60)).padStart(2,'0');
+      const ss=String(s%60).padStart(2,'0');
+      return `${mm}:${ss}`;
     }
 
-    // Sincroniza bloqueio com a prova (usa mesma chave localStorage)
-    (function syncLock(){
-      const btn = document.getElementById('btn-l1');
-      const badge = document.getElementById('lock-l1');
-      const eta = document.getElementById('lock-eta');
+    // Retorna quanto tempo (ms) ainda falta para "desbloquear"
+    // Considera chaves específicas por lista e também a chave genérica legada 'exam_lock_until'
+    function getLockLeft(keys){
+      const now = Date.now();
+      let left = 0;
+      for(const k of keys){
+        const until = Number(localStorage.getItem(k) || 0);
+        if (until && (until - now) > left) left = until - now;
+      }
+      return Math.max(0, left);
+    }
+
+    // Configura um card para observar o bloqueio em tempo real
+    function setupCard({btnId, badgeId, etaId, keys}){
+      const btn = document.getElementById(btnId);
+      const badge = document.getElementById(badgeId);
+      const eta = document.getElementById(etaId);
+
       function loop(){
-        const until = Number(localStorage.getItem('exam_lock_until')||0);
-        const left = Math.max(0, until - Date.now());
-        const locked = until && left>0;
+        const left = getLockLeft(keys);
+        const locked = left > 0;
         btn.disabled = locked;
-        badge.style.display = locked? 'inline-flex' : 'none';
-        eta.textContent = locked? fmtTime(left) : '';
+        badge.style.display = locked ? 'inline-flex' : 'none';
+        eta.textContent = locked ? fmtTime(left) : '';
         requestAnimationFrame(loop);
       }
       loop();
-    })();
+    }
+
+    // Navegação com checagem de bloqueio
+    function goLista1(){
+      const locked = getLockLeft(['exam_lock_until_l1','exam_lock_until']) > 0;
+      if (locked) return;
+      location.href = LISTA1_URL;
+    }
+
+    function goLista2(){
+      const locked = getLockLeft(['exam_lock_until_l2','exam_lock_until']) > 0;
+      if (locked) return;
+      location.href = LISTA2_URL;
+    }
+
+    // Inicializa os cards quando o DOM estiver pronto
+    document.addEventListener('DOMContentLoaded', () => {
+      setupCard({ btnId:'btn-l1', badgeId:'lock-l1', etaId:'lock-eta-l1', keys:['exam_lock_until_l1','exam_lock_until'] });
+      setupCard({ btnId:'btn-l2', badgeId:'lock-l2', etaId:'lock-eta-l2', keys:['exam_lock_until_l2','exam_lock_until'] });
+    });
   </script>
-<footer>
-  
-  <!-- Statcounter VISÍVEL (mostra a imagem/contador no rodapé) -->
-  <script type="text/javascript">
-    var sc_project = 13172460;
-    var sc_invisible = 0;                // <— VISÍVEL!
-    var sc_security = "1a960d5b";
-    var scJsHost = "https://";
-    document.write("<sc"+"ript type='text/javascript' src='" + scJsHost +
-                   "statcounter.com/counter/counter.js'></"+"script>");
-  </script>
-   <!-- Fallback para quem está sem JS -->
-  <noscript>
-    <a href="https://statcounter.com/" target="_blank" rel="nofollow" class="statcounter" title="Web Analytics">
-      <img class="statcounter"
-           src="https://c.statcounter.com/13172460/0/1a960d5b/0/"
-           alt="Web Analytics" referrerpolicy="no-referrer-when-downgrade">
-    </a>
-  </noscript>
-</footer>
- 
+
+  <footer>
+    <!-- Statcounter VISÍVEL (mostra a imagem/contador no rodapé) -->
+    <script type="text/javascript">
+      var sc_project = 13172460;
+      var sc_invisible = 0; // VISÍVEL
+      var sc_security = "1a960d5b";
+      var scJsHost = "https://";
+      document.write("<sc"+"ript type='text/javascript' src='" + scJsHost +
+                     "statcounter.com/counter/counter.js'></"+"script>");
+    </script>
+    <noscript>
+      <a href="https://statcounter.com/" target="_blank" rel="nofollow" class="statcounter" title="Web Analytics">
+        <img class="statcounter"
+             src="https://c.statcounter.com/13172460/0/1a960d5b/0/"
+             alt="Web Analytics" referrerpolicy="no-referrer-when-downgrade">
+      </a>
+    </noscript>
+  </footer>
 </body>
 </html>
